@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" 
+                  xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" 
+                  xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" 
+                  xmlns:di="http://www.omg.org/spec/DD/20100524/DI" 
+                  xmlns:flowable="http://flowable.org/bpmn" 
+                  id="definitions" targetNamespace="http://bpmn20.org/schema/bpmn">
+  
+  <bpmn:process id="customerOnboardingProcess" name="Customer Onboarding Workflow" isExecutable="true">
+    
+    <!-- Start Event -->
+    <bpmn:startEvent id="startEvent" flowable:formKey="customerOnboardingForm">
+      <bpmn:outgoing>flow1</bpmn:outgoing>
+    </bpmn:startEvent>
+    
+    <!-- Step 1: CAF Validation Service Task -->
+    <bpmn:serviceTask id="validateCAF" name="1. Validate CAF & IMSI" flowable:delegateExpression="${cafValidationService}">
+      <bpmn:extensionElements>
+        <flowable:field name="resultVariableName" stringValue="cafValidationResult"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow1</bpmn:incoming>
+      <bpmn:outgoing>flow2</bpmn:outgoing>
+    </bpmn:serviceTask>
+    
+    <!-- Step 2: CSC Approval User Task -->
+    <bpmn:userTask id="cscApproval" name="2. CSC Approval" flowable:assignee="${cscApprover}" flowable:formKey="cscApprovalForm">
+      <bpmn:incoming>flow2</bpmn:incoming>
+      <bpmn:outgoing>flowApproved</bpmn:outgoing>
+      <bpmn:outgoing>flowRejected</bpmn:outgoing>
+    </bpmn:userTask>
+    
+    <!-- Step 3: Pre-activation Service Task -->
+    <bpmn:serviceTask id="preActivation" name="3. Pre-activation" flowable:delegateExpression="${integrationService}">
+      <bpmn:extensionElements>
+        <flowable:field name="operation" stringValue="PRE_ACTIVATION"/>
+        <flowable:field name="resultVariableName" stringValue="preActivationResult"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flowApproved</bpmn:incoming>
+      <bpmn:outgoing>flow3</bpmn:outgoing>
+    </bpmn:serviceTask>
+    
+    <!-- Step 4: Wait for Pre-activation Ack -->
+    <bpmn:serviceTask id="waitPreActivationAck" name="4. Wait Pre-activation Ack" flowable:delegateExpression="${callbackService}">
+      <bpmn:extensionElements>
+        <flowable:field name="operation" stringValue="WAIT_PRE_ACTIVATION"/>
+        <flowable:field name="resultVariableName" stringValue="preAckResult"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow3</bpmn:incoming>
+      <bpmn:outgoing>flow4</bpmn:outgoing>
+    </bpmn:serviceTask>
+    
+    <!-- Step 5: Televerification Service Task -->
+    <bpmn:serviceTask id="teleVerification" name="5. Tele-verification" flowable:delegateExpression="${integrationService}">
+      <bpmn:extensionElements>
+        <flowable:field name="operation" stringValue="TELE_VERIFICATION"/>
+        <flowable:field name="resultVariableName" stringValue="teleVerResult"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow4</bpmn:incoming>
+      <bpmn:outgoing>flow5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    
+    <!-- Step 6: Wait for Televerification Ack -->
+    <bpmn:serviceTask id="waitTeleVerAck" name="6. Wait Tele-ver Ack" flowable:delegateExpression="${callbackService}">
+      <bpmn:extensionElements>
+        <flowable:field name="operation" stringValue="WAIT_TELE_VER"/>
+        <flowable:field name="resultVariableName" stringValue="teleAckResult"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow5</bpmn:incoming>
+      <bpmn:outgoing>flowSuccess</bpmn:outgoing>
+      <bpmn:outgoing>flowTeleFail</bpmn:outgoing>
+    </bpmn:serviceTask>
+    
+    <!-- Step 7: Final Activation -->
+    <bpmn:serviceTask id="finalActivation" name="7. Final Activation" flowable:delegateExpression="${integrationService}">
+      <bpmn:extensionElements>
+        <flowable:field name="operation" stringValue="FINAL_ACTIVATION"/>
+        <flowable:field name="resultVariableName" stringValue="finalActResult"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flowSuccess</bpmn:incoming>
+      <bpmn:outgoing>flow6</bpmn:outgoing>
+    </bpmn:serviceTask>
+    
+    <!-- Step 8: Wait Final Ack -->
+    <bpmn:serviceTask id="waitFinalAck" name="8. Wait Final Ack" flowable:delegateExpression="${callbackService}">
+      <bpmn:extensionElements>
+        <flowable:field name="operation" stringValue="WAIT_FINAL_ACTIVATION"/>
+        <flowable:field name="resultVariableName" stringValue="finalAckResult"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow6</bpmn:incoming>
+      <bpmn:outgoing>flow7</bpmn:outgoing>
+    </bpmn:serviceTask>
+    
+    <!-- Step 9: Commission Settlement (Agent only) -->
+    <bpmn:serviceTask id="commissionSettlement" name="9. Commission Settlement" flowable:delegateExpression="${integrationService}">
+      <bpmn:extensionElements>
+        <flowable:field name="operation" stringValue="COMMISSION_SETTLEMENT"/>
+        <flowable:field name="resultVariableName" stringValue="commissionResult"/>
+      </bpmn:extensionElements>
+      <bpmn:incoming>flow7</bpmn:incoming>
+      <bpmn:outgoing>flowComplete</bpmn:outgoing>
+    </bpmn:serviceTask>
+    
+    <!-- End Events -->
+    <bpmn:endEvent id="complete" name="Process Completed">
+      <bpmn:incoming>flowComplete</bpmn:incoming>
+    </bpmn:endEvent>
+    
+    <!-- Rejection Flows -->
+    <bpmn:endEvent id="rejected" name="CAF Rejected">
+      <bpmn:incoming>flowRejected</bpmn:incoming>
+    </bpmn:endEvent>
+    
+    <bpmn:endEvent id="teleVerFailed" name="Tele-verification Failed">
+      <bpmn:incoming>flowTeleFail</bpmn:incoming>
+    </bpmn:endEvent>
+    
+    <!-- Sequence Flows -->
+    <bpmn:sequenceFlow id="flow1" sourceRef="startEvent" targetRef="validateCAF"/>
+    <bpmn:sequenceFlow id="flow2" sourceRef="validateCAF" targetRef="cscApproval"/>
+    <bpmn:sequenceFlow id="flowApproved" name="Approved" sourceRef="cscApproval" targetRef="preActivation">
+      <bpmn:conditionExpression>${cscApprovalOutcome == 'APPROVED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flowRejected" name="Rejected" sourceRef="cscApproval" targetRef="rejected">
+      <bpmn:conditionExpression>${cscApprovalOutcome == 'REJECTED'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow3" sourceRef="preActivation" targetRef="waitPreActivationAck"/>
+    <bpmn:sequenceFlow id="flow4" sourceRef="waitPreActivationAck" targetRef="teleVerification"/>
+    <bpmn:sequenceFlow id="flow5" sourceRef="teleVerification" targetRef="waitTeleVerAck"/>
+    <bpmn:sequenceFlow id="flowSuccess" name="Success" sourceRef="waitTeleVerAck" targetRef="finalActivation">
+      <bpmn:conditionExpression>${teleAckResult.status == 'SUCCESS'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flowTeleFail" name="Failed" sourceRef="waitTeleVerAck" targetRef="teleVerFailed">
+      <bpmn:conditionExpression>${teleAckResult.status != 'SUCCESS'}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="flow6" sourceRef="finalActivation" targetRef="waitFinalAck"/>
+    <bpmn:sequenceFlow id="flow7" sourceRef="waitFinalAck" targetRef="commissionSettlement"/>
+    <bpmn:sequenceFlow id="flowComplete" sourceRef="commissionSettlement" targetRef="complete"/>
+    
+  </bpmn:process>
+</bpmn:definitions>
